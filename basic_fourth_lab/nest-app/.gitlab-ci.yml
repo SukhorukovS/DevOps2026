@@ -1,0 +1,135 @@
+# Базовый образ с конкретной версией
+image: node:20.19-alpine
+
+# Стадии пайплайна в правильном порядке
+stages:
+  - install
+  - lint
+  - test
+  - build
+  - deploy
+
+# Глобальные переменные (без секретов!)
+variables:
+  NODE_ENV: development
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Кеширование с правильной политикой
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
+  policy: pull-push
+
+# Шаблон для оптимизации
+.standard-setup: &standard-setup
+  before_script:
+    - node --version
+    - yarn --version
+
+install_dependencies:
+  stage: install
+  script:
+    - yarn
+  artifacts:
+    paths:
+      - node_modules/
+    expire_in: 1 hour
+  only:
+    - merge_requests
+    - main
+    - develop
+
+lint_code:
+  stage: lint
+  needs:
+    - install_dependencies
+  script:
+    - yarn run lint
+  artifacts:
+    reports:
+      codequality: eslint-report.json
+  only:
+    - merge_requests
+    - main
+    - develop
+  allow_failure: false
+
+unit_tests:
+  stage: test
+  needs:
+    - install_dependencies
+  script:
+    - yarn run test
+  only:
+    - merge_requests
+    - main
+    - develop
+
+build_application:
+  stage: build
+  needs:
+    - unit_tests
+    - lint_code
+  script:
+    - yarn run build
+  artifacts:
+    paths:
+      - dist/
+      - node_modules/
+      - package.json
+      - package-lock.json
+    expire_in: 1 day
+  only:
+    - main
+    - develop
+
+deploy_to_development:
+  stage: deploy
+  needs:
+    - build_application
+  environment:
+    name: development
+    url: https://dev.example.com
+  script:
+    - echo "Deploying to development environment..."
+  only:
+    - develop
+  when: manual
+  allow_failure: false
+
+deploy_to_staging:
+  stage: deploy
+  needs:
+    - build_application
+  environment:
+    name: staging
+    url: https://staging.example.com
+  script:
+    - echo "Deploying to staging environment..."
+  variables:
+    NODE_ENV: staging
+
+deploy_to_production:
+  stage: deploy
+  needs:
+    - deploy_to_staging
+  environment:
+    name: production
+    url: https://prod.example.com
+  script:
+    - echo "Deploying to production environment..."
+  variables:
+    NODE_ENV: production
+
+cleanup_old_artifacts:
+  stage: deploy
+  script:
+    - echo "Cleaning up old artifacts..."
+    - find . -name "*.old" -delete
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
+

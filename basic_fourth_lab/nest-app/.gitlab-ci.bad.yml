@@ -1,0 +1,59 @@
+# Секреты внутри файла
+variables:
+  DB_PASSWORD: "MySuperSecretPassword123!"
+  JWT_SECRET: "my-jwt-secret-key-2024"
+  AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
+  AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  DOCKER_REGISTRY_PASSWORD: "docker-password-here"
+
+# Обращение к последнему образу, не к конкретной версии
+image: node:latest
+
+# Все этапы в одной стадии без параллелизации
+stages:
+  - main
+
+# Огромный монолитный джоб без разделения на stages
+main_job:
+  stage: main
+
+# Запуск только на конкретной ветке без тегов и MR
+  only:
+    - main
+  script:
+
+    - npm install -g @nestjs/cli
+    - npm install
+    
+    - npm test
+    
+    - npm run build
+    
+    - npm run lint
+    
+    - echo "Deploying to production..."
+
+# Хранение артефактов без ограничения времени
+  artifacts:
+    paths:
+      - node_modules/
+      - dist/
+      - .env
+      - config/
+
+# Отсутствие правил для разных окружений
+deploy_to_staging:
+  stage: main
+  script:
+    - echo "Deploying to staging..."
+
+    # Запуск prod окружения в staging
+    - npm run start:prod
+  environment:
+    name: staging
+
+# Кеширование node_modules без package-lock.json
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
